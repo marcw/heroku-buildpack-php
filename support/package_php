@@ -11,8 +11,12 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+
 php_version="$1"
 php_redis_version="2.2.4"
+
+icu_version="4.4.2"
+icu_url="http://download.icu-project.org/files/icu4c/4.4.2/icu4c-4_4_2-src.tgz"
 
 if [ -z "$PHP_ZLIB_VERSION" ]; then
     PHP_ZLIB_VERSION=1.2.8
@@ -37,6 +41,15 @@ tar -xzvf "php-${php_version}.tar.gz"
 echo "-----> Downloading php-redis $php_redis_version"
 curl -L -o - "https://github.com/nicolasff/phpredis/archive/${php_redis_version}.tar.gz" > "phpredis-${php_redis_version}.tar.gz"
 tar -xzvf "phpredis-${php_redis_version}.tar.gz"
+
+echo "-----> Downloading ICU $icu_version..."
+curl -sL ${icu_url} -o icu-${icu_version}.tgz
+tar xzf icu-${icu_version}.tgz
+mv icu/ icu-${icu_version}
+vulcan build -v -s icu-${icu_version} -o $tempdir/icu-${icu_version}-heroku.tar.gz -p /app/vendor/php/icu -c 'cd source/ && ./runConfigureICU Linux --enable-tests=no --enable-samples=no --exec-prefix=/app/vendor/php/icu --prefix=/app/vendor/php/icu && make install'
+echo "-----> Extracting ICU ${icu_version}-heroku..."
+mkdir ./php-${php_version}/icu
+tar -xzf $tempdir/icu-${icu_version}-heroku.tar.gz -C ./php-${php_version}/icu
 
 # php_memcached_version=40ce9b4633de5d70f056e4d434d9b064263348d0
 
@@ -64,6 +77,7 @@ build_command=$(cat <<BUILD_CMD
     && mkdir -p "/app/vendor/php/etc/conf.d" \
     && cd zlib-${PHP_ZLIB_VERSION} && ./configure --prefix=/app/vendor/php/zlib && make && make install \
     && cd ../php-${php_version} && ./configure --prefix=/app/vendor/php \
+    --with-icu-dir=/app/vendor/php/icu
     --with-config-file-path=/app/vendor/php/etc \
     --with-config-file-scan-dir=/app/vendor/php/etc/conf.d \
     --with-gd \
@@ -116,6 +130,7 @@ vulcan build --verbose \
     --command "$build_command"
 
 echo "-----> Moving package to S3"
+
 
 s3cmd put --verbose \
     --acl-public \
